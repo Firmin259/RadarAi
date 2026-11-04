@@ -15,37 +15,58 @@ import { getAuth } from "firebase-admin/auth";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load server/.env
+// Load local server/.env.
+// Render environment variables are supplied separately.
 dotenv.config({
   path: path.resolve(__dirname, "../.env")
 });
 
-// Read Firebase credentials path
-const credentialsPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+// Read credentials path
+const credentialsPath =
+  process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
 
 if (!credentialsPath) {
   throw new Error(
-    "FIREBASE_SERVICE_ACCOUNT_PATH is missing from server/.env"
+    "FIREBASE_SERVICE_ACCOUNT_PATH is missing."
   );
 }
 
-// Locate JSON file
-const fullPath = path.resolve(
-  __dirname,
-  "..",
-  credentialsPath
-);
+// Support both absolute Render paths and local relative paths
+const fullPath = path.isAbsolute(credentialsPath)
+  ? credentialsPath
+  : path.resolve(__dirname, "..", credentialsPath);
 
+// Check credentials file
 if (!fs.existsSync(fullPath)) {
-  throw new Error("Firebase credentials file not found: " + fullPath);
+  throw new Error(
+    `Firebase credentials file not found: ${fullPath}`
+  );
 }
 
-// Read credentials
-const serviceAccount = JSON.parse(
-  fs.readFileSync(fullPath, "utf8")
-);
+// Read and validate JSON
+let serviceAccount;
 
-// Initialize Firebase Admin
+try {
+  serviceAccount = JSON.parse(
+    fs.readFileSync(fullPath, "utf8")
+  );
+} catch {
+  throw new Error(
+    "Firebase service account JSON is invalid."
+  );
+}
+
+if (
+  !serviceAccount.project_id ||
+  !serviceAccount.client_email ||
+  !serviceAccount.private_key
+) {
+  throw new Error(
+    "Firebase service account JSON is missing required fields."
+  );
+}
+
+// Initialize Firebase only once
 const app = getApps().length
   ? getApps()[0]
   : initializeApp({
@@ -58,4 +79,7 @@ export const firebaseAdmin = {
   auth: getAuth(app)
 };
 
-console.log("Firebase Admin connected successfully.");
+console.log(
+  `Firebase Admin connected successfully. Project: ${serviceAccount.project_id}`
+);
+
