@@ -2,7 +2,8 @@
 import axios from "axios";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5000/api"
 ).replace(/\/+$/, "");
 
 const SERVER_URL = new URL(API_URL).origin;
@@ -14,10 +15,12 @@ const api = axios.create({
   }
 });
 
-// Automatically attach Radar Bot JWT to protected requests
+// Automatically attach Radar Bot JWT
 api.interceptors.request.use(
   config => {
     const token = localStorage.getItem("radar_token");
+
+    config.headers = config.headers || {};
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

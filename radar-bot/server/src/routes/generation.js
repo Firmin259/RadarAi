@@ -1,54 +1,198 @@
+
 import { Router } from "express";
 import { GoogleGenAI } from "@google/genai";
 import Replicate from "replicate";
-import pool from "../db.js";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
 
 const router = Router();
-const gemini = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
-const replicate = process.env.REPLICATE_API_TOKEN
-  ? new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-  : null;
 
-router.post("/image", async (req, res, next) => {
-  const prompt = String(req.body.prompt || "").trim();
-  if (!prompt) return res.status(400).json({ error: "Enter an image prompt." });
-  if (!gemini) return res.status(503).json({ error: "Gemini image generation is not configured. Add GEMINI_API_KEY to server/.env." });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  try {
-    const result = await gemini.models.generateContent({
-      model: process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image",
-      contents: prompt,
-      config: { responseModalities: ["IMAGE"] }
-    });
-    const imagePart = result.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data);
-    if (!imagePart) throw new Error("Gemini returned no image. Try a different prompt.");
-    const mimeType = imagePart.inlineData.mimeType || "image/png";
-    const extension = mimeType.includes("jpeg") ? "jpg" : mimeType.includes("webp") ? "webp" : "png";
-    const dir = path.resolve("uploads", "generated");
-    fs.mkdirSync(dir, { recursive: true });
-    const filename = `${crypto.randomUUID()}.${extension}`;
-    fs.writeFileSync(path.join(dir, filename), Buffer.from(imagePart.inlineData.data, "base64"));
-    res.json({ url: `/uploads/generated/${filename}` });
-  } catch (err) { next(err); }
-});
+// Resolve uploads relative to the server directory
+const uploadsDir = path.resolve(__dirname, "../../uploads/generated");
 
-router.post("/video", async (req, res, next) => {
-  const prompt = String(req.body.prompt || "").trim();
-  if (!prompt) return res.status(400).json({ error: "Enter a video prompt." });
-  if (!replicate || !process.env.REPLICATE_MODEL_VERSION) {
-    return res.status(503).json({ error: "Video generation is not configured. Set REPLICATE_API_TOKEN and REPLICATE_MODEL_VERSION in server/.env." });
+function getGemini() {
+  const key = process.env.GEMINI_API_KEY?.trim();
+
+  if (!key) return null;
+
+  return new GoogleGenAI({ apiKey: key });
+}
+
+function getReplicate() {
+  const token = process.env.REPLICATE_API_TOKEN?.trim();
+
+  if (!token) return null;
+
+  return new Replicate({ auth: token });
+}
+
+// Extract video URL from different Replicate output formats
+function extractVideoUrl(output) {
+  const candidate = Array.isArray(output) ? output[0] : output;
+
+  if (typeof candidate === "string") return candidate;
+
+  if (candidate?.url) {
+    return typeof candidate.url === "function"
+      ? candidate.url().toString()
+      : String(candidate.url);
   }
 
+  if (candidate?.href) return candidate.href;
+
+  return null;
+}
+
+// IMAGE GENERATION
+router.post("/image", async (req, res) => {
   try {
-    const output = await replicate.run(process.env.REPLICATE_MODEL_VERSION, { input: { prompt } });
-    const candidate = Array.isArray(output) ? output[0] : output;
-    const url = typeof candidate === "string" ? candidate : candidate?.url;
-    if (!url) throw new Error("The selected video model returned an unsupported output. Update generation.js for that model's output schema.");
-    res.json({ url });
-  } catch (err) { next(err); }
+    const prompt = String(req.body.prompt || "").trim();
+
+    if (!prompt) {
+      return res.status(400).json({
+        error: "Enter an image prompt."
+      });
+    }
+
+    if (prompt.length > 4000) {
+      return res.status(400).json({
+        error: "Image prompt is too long."
+      });
+    }
+
+    const gemini = getGemini();
+
+    if (!gemini) {
+      return res.status(503).json({
+        error: "Gemini API is not configured. Add GEMINI_API_KEY to server/.env."
+      });
+    }
+
+    const result = await gemini.models.generateContent({
+      model: process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image",
+      contents: prompt,
+      config: {
+        responseModalities: ["IMAGE"]
+      }
+    });
+
+    const parts = result.candidates?.[0]?.content?.parts || [];
+
+    const imagePart = parts.find(
+      part => part.inlineData?.data
+    );
+
+    if (!imagePart) {
+      throw new Error(
+        result.candidates?.[0]?.finishReason
+          ? `Gemini did not return an image. Finish reason: ${result.candidates[0].finishReason}`
+          : "Gemini returned no image. Try another prompt."
+      );
+    }
+
+    const mimeType = imagePart.inlineData.mimeType || "image/png";
+
+    const extensions = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/webp": "webp"
+    };
+
+    const extension = extensions[mimeType];
+
+    if (!extension) {
+      throw new Error("Gemini returned an unsupported image format.");
+    }
+
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const filename = `${crypto.randomUUID()}.${extension}`;
+
+    fs.writeFileSync(
+      path.join(uploadsDir, filename),
+      Buffer.from(imagePart.inlineData.data, "base64")
+    );
+
+    return res.json({
+      url: `/uploads/generated/${filename}`,
+      type: mimeType
+    });
+
+  } catch (err) {
+    console.error("IMAGE GENERATION ERROR:", err);
+
+    const status = err.status || err.statusCode;
+
+    if (status === 401 || status === 403) {
+      return res.status(502).json({
+        error: "Gemini rejected the API credentials. Check GEMINI_API_KEY."
+      });
+    }
+
+    return res.status(500).json({
+      error: err.message || "Image generation failed."
+    });
+  }
+});
+
+// VIDEO GENERATION
+router.post("/video", async (req, res) => {
+  try {
+    const prompt = String(req.body.prompt || "").trim();
+
+    if (!prompt) {
+      return res.status(400).json({
+        error: "Enter a video prompt."
+      });
+    }
+
+    if (prompt.length > 4000) {
+      return res.status(400).json({
+        error: "Video prompt is too long."
+      });
+    }
+
+    const replicate = getReplicate();
+
+    if (!replicate || !process.env.REPLICATE_MODEL_VERSION) {
+      return res.status(503).json({
+        error: "Video generation is not configured. Check REPLICATE_API_TOKEN and REPLICATE_MODEL_VERSION."
+      });
+    }
+
+    const output = await replicate.run(
+      process.env.REPLICATE_MODEL_VERSION,
+      {
+        input: { prompt }
+      }
+    );
+
+    const url = extractVideoUrl(output);
+
+    if (!url) {
+      throw new Error(
+        "Replicate returned an unsupported video output."
+      );
+    }
+
+    return res.json({
+      url,
+      type: "video/mp4"
+    });
+
+  } catch (err) {
+    console.error("VIDEO GENERATION ERROR:", err);
+
+    return res.status(500).json({
+      error: err.message || "Video generation failed."
+    });
+  }
 });
 
 export default router;
