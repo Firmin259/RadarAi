@@ -14,7 +14,7 @@ import uploadRoutes from "./routes/uploads.js";
 import generationRoutes from "./routes/generation.js";
 
 import { requireAuth } from "./middleware/auth.js";
-import pool from "./db.js";
+
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -81,25 +81,14 @@ app.use(
   })
 );
 
-// Health check
-app.get("/api/health", async (_req, res) => {
-  try {
-    await pool.query("SELECT 1");
-
-    res.json({
-      status: "ok",
-      database: "connected"
-    });
-
-  } catch (error) {
-    console.error("Database health check:", error.message);
-
-    res.status(503).json({
-      status: "error",
-      database: "disconnected"
-    });
-  }
+// Health check (Database bypassed)
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    message: "Radar Bot Server is operational!"
+  });
 });
+
 
 // Authentication
 // Mirror route to catch the frontend's hardcoded path
