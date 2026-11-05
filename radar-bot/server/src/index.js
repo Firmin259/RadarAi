@@ -102,7 +102,9 @@ app.get("/api/health", async (_req, res) => {
 });
 
 // Authentication
-app.use("/api/auth", authRoutes);
+// Mirror route to catch the frontend's hardcoded path
+app.use("/auth", authRoutes);
+
 
 // Protected routes
 app.use("/api/chats", requireAuth, chatRoutes);

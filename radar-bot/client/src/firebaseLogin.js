@@ -14,7 +14,7 @@ export async function loginWithGoogle() {
   const idToken = await result.user.getIdToken();
 
   // Send Firebase token to Radar Bot backend
-  const response = await fetch(`${API_URL}/auth/firebase`, {
+  const response = await fetch(`${API_URL}/api/auth/firebase`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
