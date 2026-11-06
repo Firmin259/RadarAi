@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const API_URL = (
-  import.meta.env.API_URL_CONFIG || "http://localhost:5000/api"
+  import.meta.env.API_URL_CONFIG ||  "https://radarai-u9v9.onrender.com"
 ).replace(/\/+$/, "");
 
 const SERVER_URL = new URL(API_URL).origin;
