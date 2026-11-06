@@ -1,9 +1,11 @@
-
 import axios from "axios";
 
-const API_URL = (
-  import.meta.env.API_URL_CONFIG ||  "https://radarai-u9v9.onrender.com"
-).replace(/\/+$/, "");
+// Force production URL when running live on Vercel, use localhost only when testing on your own PC
+const IS_PRODUCTION = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+
+const API_URL = IS_PRODUCTION 
+  ? "https://onrender.com" 
+  : "http://localhost:5000/api";
 
 const SERVER_URL = new URL(API_URL).origin;
 
