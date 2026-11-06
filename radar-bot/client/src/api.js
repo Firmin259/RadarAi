@@ -1,8 +1,9 @@
 import axios from "axios";
 
-// Force production URL when running live on Vercel, use localhost only when testing on your own PC
+// Look at the browser window link to see if the user is live on Vercel or testing locally
 const IS_PRODUCTION = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
+// Hardcode your custom paths directly here so Vercel cannot strip them away
 const API_URL = IS_PRODUCTION 
   ? "https://onrender.com" 
   : "http://localhost:5000/api";
