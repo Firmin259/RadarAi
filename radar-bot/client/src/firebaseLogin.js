@@ -1,10 +1,6 @@
-
+import api from "./api.js";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "./firebase.js";
-
-const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
-).replace(/\/+$/, "");
 
 export async function loginWithGoogle() {
   // Sign in using Google Firebase authentication
@@ -13,20 +9,9 @@ export async function loginWithGoogle() {
   // Get Firebase ID token
   const idToken = await result.user.getIdToken();
 
-  // Send Firebase token to Radar Bot backend
-  const response = await fetch(`${API_URL}/api/auth/firebase`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ idToken })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Google login failed.");
-  }
+  // Clean Fix: Leverage your imported 'api' axios instance tool to manage the path correctly
+  const response = await api.post("/auth/firebase", { idToken });
+  const data = response.data;
 
   if (!data.token || !data.user) {
     throw new Error("Backend did not return a valid Radar Bot login token.");

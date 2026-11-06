@@ -15,7 +15,6 @@ import generationRoutes from "./routes/generation.js";
 
 import { requireAuth } from "./middleware/auth.js";
 
-
 const app = express();
 const port = Number(process.env.PORT || 5000);
 
@@ -89,11 +88,9 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-
-// Authentication
-// Mirror route to catch the frontend's hardcoded path
-app.use("/auth", authRoutes);
-
+// Authentication Route
+// FIXED: Prefix changed from "/auth" to "/api/auth" to align perfectly with frontend calls
+app.use("/api/auth", authRoutes);
 
 // Protected routes
 app.use("/api/chats", requireAuth, chatRoutes);
